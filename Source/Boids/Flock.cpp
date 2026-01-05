@@ -20,7 +20,11 @@ void AFlock::BeginPlay()
 {
 	Super::BeginPlay();
 
-
+	FVector AL = GetActorLocation();
+	for(FVector v : passagepoints)
+	{
+		v = v + AL;
+	}
 
 	CreateInstances();
 	
@@ -37,24 +41,57 @@ void AFlock::Tick(float DeltaTime)
 			
 				//Direction = separate(i);
 			
-			FVector Acceleration = Direction +
-				separate(i);//+ * SeparationWeight +
-					//align(i) +//* AlignmentWeight +
-					//cohesion(i);// *CohesionWeight;
+			FVector Acceleration = Direction +separate(i)+align(i) +cohesion(i);
 
-			/*	 particles[i]->Velocity += Acceleration * DeltaTime;
-				particles[i]->Velocity = particles[i]->Velocity.GetClampedToMaxSize(100.);*/
-				particles[i]->Position += particles[i]->Velocity * DeltaTime * 100.;
+		
+
+				// particles[i]->Velocity = Acceleration * DeltaTime;
+				//particles[i]->Velocity = particles[i]->Velocity.GetClampedToMaxSize(1000.);
+				//particles[i]->Position += particles[i]->Velocity * DeltaTime ;
 				particles[i]->Position += Acceleration * DeltaTime * 100.;
 			
+				
 			//particles[i]->Update(DeltaTime, Direction);
-			//FTransform T(FRotator::ZeroRotator, particles[i]->Position);
+			
 			ISM->UpdateInstanceTransform(i, FTransform(particles[i]->Position), false, true);
 
 		}
 	
 	ISM->MarkRenderStateDirty();
 	
+}
+
+bool AFlock::isinview(int32 i, int32 ii) const
+{
+	const FVector BoidPos = particles[i]->Position;
+	const FVector BoidForward = particles[i]->Velocity.GetSafeNormal();
+
+	const FVector ToOther =
+		(particles[ii]->Position - BoidPos).GetSafeNormal();
+
+	// Sécurité
+	if (BoidForward.IsNearlyZero())
+		return false;
+
+	float Dot = FVector::DotProduct(BoidForward, ToOther);
+
+	// Clamp pour éviter NaN avec Acos
+	Dot = FMath::Clamp(Dot, -1.f, 1.f);
+
+	float Angle = FMath::Acos(Dot);
+
+	return Angle < FMath::DegreesToRadians(ViewAngle);
+
+	//return true;
+}
+
+void AFlock::updestination()
+{
+
+}
+
+void AFlock::GenerateGoldenSpherePoints(int32 NumPoints, TArray<FVector>& Points)
+{
 }
 
 // create particles one by one
@@ -94,7 +131,7 @@ FVector AFlock::separate(int32 index)
 			particles[j]->Position
 		);
 
-		if (Dist > 0 && Dist < 500.)
+		if (Dist > 0 && Dist < DistanceMin && isinview(index,j))
 		{
 			Force = (Force + (particles[index]->Position - particles[j]->Position).GetSafeNormal()).GetSafeNormal();
 		
@@ -103,7 +140,6 @@ FVector AFlock::separate(int32 index)
 	}
 
 	return Force;
-	
 
 	/*Ratio = 1 - Length(MyBoid.Position - OtherBoid.Position) / MaxDistance
 		OtherDirection = Normalize(MyBoid.Position - OtherBoid.Position)
@@ -123,7 +159,7 @@ FVector AFlock::align(int32 index)
 		float Dist = FVector::Dist(particles[index]->Position, particles[j]->Position);
 			
 
-		if (Dist < 500.)
+		if (Dist < 500. )//&& isinview(index, j))
 		{
 			AvgVel += particles[j]->Velocity;
 			Count++;
@@ -145,29 +181,38 @@ FVector AFlock::cohesion(int32 index)
 	//Centroid.X = Sum(AllBoidsInRange.X) / NumBoidsInRange
 	//	Centroid.Y = Sum(AllBoidsInRange.Y) / NumBoidsInRange
 
-	FVector Center = FVector::ZeroVector;
-	int Count = 0;
+	FVector Sum = FVector::ZeroVector;
+	int32 NumBoidsInRange = 0;
+
+	const FVector MyPos = particles[index]->Position;
 
 	for (int j = 0; j < particles.Num(); j++)
 	{
-		if (index == j) continue;
+		if (j == index) continue;
 
-		float Dist = FVector::Dist(particles[index]->Position, particles[j]->Position);
+		const FVector OtherPos = particles[j]->Position;
+		const float Dist = FVector::Dist(MyPos, OtherPos);
 
-		if (Dist < 500.)
+		if (Dist > DistanceMin )//&& isinview(index, j))
 		{
-			Center += particles[j]->Position;
-			Count++;
+			Sum += OtherPos;
+			NumBoidsInRange++;
 		}
+		else return FVector::ZeroVector;
 	}
 
-	if (Count > 0)
+	if (NumBoidsInRange == 0)
 	{
-		Center /= Count;
-		return (Center - particles[index]->Position).GetSafeNormal();
+		return FVector::ZeroVector;
 	}
 
-	return  FVector::ZeroVector;
+	FVector Centroid;
+	Centroid.X = Sum.X / particles.Num();
+	Centroid.Y = Sum.Y / particles.Num();
+	Centroid.Z = Sum.Z / particles.Num();
+
+	// Direction vers le centre du groupe
+	return (Centroid - MyPos).GetSafeNormal();
 	
 }
 

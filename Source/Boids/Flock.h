@@ -31,12 +31,17 @@ public:
 	UPROPERTY(EditAnywhere, category = "custom")
 	FVector Direction = FVector(0., 0., 0.);
 
+	UPROPERTY(EditAnywhere, category = "custom")
+	float DistanceMin = 250.;
 
 	UPROPERTY(EditAnywhere, category = "custom")
 	int NumofBoids = 1000;
 
 	UPROPERTY(EditAnywhere, category = "custom")
 	float Radius = 1000.;
+
+	UPROPERTY(EditAnywhere , category = "custom")
+	float ViewAngle = 120.f;
 
 	UPROPERTY(EditAnywhere, category = "custom")
 	TArray<FVector> passagepoints;
@@ -53,9 +58,11 @@ public:
 
 	TArray<Particle*> particles;
 
+	bool isinview(int32 i, int32 ii) const;
 
+	void updestination();
 
-	
+	void GenerateGoldenSpherePoints(int32 NumPoints, TArray<FVector>& Points);
 
 	TArray<class UInstancedStaticMeshComponent> ISMlist; 
 
